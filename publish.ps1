@@ -2,6 +2,9 @@ param([string]$Message = 'Update engineering portfolio')
 $ErrorActionPreference = 'Stop'
 $projectDir = $PSScriptRoot
 Set-Location -LiteralPath $projectDir
+$gitCandidates = @((Join-Path $env:LOCALAPPDATA 'Programs/Git/cmd/git.exe'), 'C:/Program Files/Git/cmd/git.exe')
+$gitPath = $gitCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $gitPath) { $gitPath = (Get-Command git -ErrorAction Stop).Source }
 $pythonCandidates = @('C:/Users/mocha/AppData/Local/Programs/Python/Python311/python.exe', 'C:/Users/mocha/AppData/Local/Programs/Python/Python313/python.exe')
 $python = $pythonCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not $python) { $python = (Get-Command python -ErrorAction Stop).Source }
@@ -16,14 +19,14 @@ foreach ($relative in $toStage) {
     if (-not $target.StartsWith($projectDir + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'A source file leaves the project folder.' }
     if ((Get-Item -LiteralPath $target).Length -gt 95MB) { throw ('File exceeds GitHub limit: ' + $relative) }
 }
-& git add -f -- @toStage
+& $gitPath add -f -- @toStage
 if ($LASTEXITCODE -ne 0) { throw 'Could not stage the portfolio source.' }
-& git diff --cached --quiet
+& $gitPath diff --cached --quiet
 if ($LASTEXITCODE -eq 1) {
-    & git commit -m $Message
+    & $gitPath commit -m $Message
     if ($LASTEXITCODE -ne 0) { throw 'Commit failed.' }
 } elseif ($LASTEXITCODE -ne 0) { throw 'Could not inspect staged changes.' }
-& git push -u origin main
+& $gitPath push -u origin main
 if ($LASTEXITCODE -ne 0) { throw 'Push failed. No remote content was replaced; resolve the reported Git issue before retrying.' }
 Write-Output 'Pushed. GitHub Actions will deploy https://chromahud1.github.io/'
 Write-Output 'Deployment status: https://github.com/chromaHUD1/chromaHUD1.github.io/actions'

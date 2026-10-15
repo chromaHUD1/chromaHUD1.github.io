@@ -28,6 +28,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
+          cache-dependency-path: requirements-publish.txt
       - name: Install video conversion dependency
         run: python -m pip install -r requirements-publish.txt
       - name: Prepare and validate public pages
