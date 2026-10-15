@@ -1,0 +1,40 @@
+# Only the current portfolio source and publishing tools belong in this repository.
+/*
+!/.gitignore
+!/.gitattributes
+!/.github/
+!/README.md
+!/EDITING.md
+!/editor_server.py
+!/start-editor.ps1
+!/publish.ps1
+!/Publish Website.cmd
+!/requirements-publish.txt
+!/tools/
+!/dist/
+!/portfolio-qr.png
+!/portfolio-qr.svg
+!/portfolio-qr-url.txt
+
+/dist/*
+!/dist/index.html
+!/dist/projects.html
+!/dist/project-*.html
+!/dist/editor.html
+!/dist/editor.js
+!/dist/editor-extras.js
+!/dist/editor-template.js
+!/dist/portfolio-layout.js
+!/dist/portfolio-pages.js
+!/dist/portfolio-zip.js
+!/dist/Edit Website.cmd
+# Referenced media is staged individually by publish.ps1; unrelated documents stay local.
+/dist/assets/**
+/dist/Media/**
+__pycache__/
+*.pyc
+.env
+.env.*
+*.pem
+*.key
+*.log
