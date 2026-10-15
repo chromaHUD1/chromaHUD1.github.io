@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import struct
 import tempfile
 from urllib.parse import unquote, urlsplit
 
@@ -52,7 +53,26 @@ def clean_jpeg(data):
         length = int.from_bytes(data[offset + 2:offset + 4], 'big')
         if length < 2 or offset + 2 + length > len(data): return data
         segment = data[offset:offset + 2 + length]
-        if marker != 0xE1: parts.append(segment)
+        if marker != 0xE1:
+            parts.append(segment)
+        elif segment[4:10] == b'Exif\0\0':
+            # Retain display orientation while dropping GPS and other camera metadata.
+            tiff = segment[10:]
+            try:
+                endian = '<' if tiff[:2] == b'II' else '>'
+                directory = struct.unpack_from(endian + 'I', tiff, 4)[0]
+                count = struct.unpack_from(endian + 'H', tiff, directory)[0]
+                for index in range(count):
+                    entry = directory + 2 + 12 * index
+                    tag, kind, size = struct.unpack_from(endian + 'HHI', tiff, entry)
+                    if tag == 274 and kind == 3 and size == 1:
+                        orientation = struct.unpack_from(endian + 'H', tiff, entry + 8)[0]
+                        if 1 <= orientation <= 8:
+                            minimal = b'Exif\0\0II*\0' + struct.pack('<IH', 8, 1) + struct.pack('<HHIHHI', 274, 3, 1, orientation, 0, 0)
+                            parts.append(b'\xff\xe1' + struct.pack('>H', len(minimal) + 2) + minimal)
+                        break
+            except (struct.error, IndexError):
+                pass
         offset += 2 + length
     return data
 
