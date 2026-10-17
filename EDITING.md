@@ -41,3 +41,5 @@ Code categories also accept ZIP archives (up to 20 MB each), including alongside
 Section order: expand Section order inside any project and use the up/down arrows to rearrange its sections. This includes the overview, Motivation, engineering details, simulation, media, individual code categories or custom text sections, CAD files, and parts list. The title stays at the top. Empty sections appear on the public page once filled. Save website remembers the order.
 
 Every project supports the cube's overview layout: headline image on the left and three short sections on the right, beneath the title. Under Projects, expand Three short sections to enter their headings and descriptions. The overview moves together when you change section order; on mobile, the image and short sections stack vertically.
+
+Double-click editable text in the preview to open the matching tab, expand its controls, scroll to its field, and focus it. This works for About text, project titles and descriptions, the three short sections, Motivation, engineering details, custom sections, code files, captions, CAD files, and parts. Clicking page links once still navigates through the preview.

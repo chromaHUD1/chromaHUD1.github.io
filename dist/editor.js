@@ -97,7 +97,7 @@
   function exportFiles(){const canonical=buildCanonicalHTML();const files=window.createPortfolioPages(canonical,state);files['editor-template.js']='window.PORTFOLIO_TEMPLATE = '+JSON.stringify(canonical)+';\nwindow.PORTFOLIO_SAVED_STATE = '+JSON.stringify(state)+';';return files;}
   function buildHTML(preview=false,page='index.html'){const files=window.createPortfolioPages(buildCanonicalHTML(),state);if(!files[page])page='index.html';let html=files[page];if(preview){const doc=parser.parseFromString(html,'text/html');const base=element(doc,'base');base.href=new URL('.',location.href).href;doc.head.prepend(base);html='<!doctype html>\n'+doc.documentElement.outerHTML;}return html;}
   function render(){try{const iframe=$('#preview');const previousDocument=iframe.contentDocument;try{previewScroll=iframe.contentWindow.scrollY||previewScroll;}catch{}iframe.srcdoc=buildHTML(true,previewPage);let attempts=0;const connect=()=>{const doc=iframe.contentDocument;if(doc&&doc!==previousDocument&&$('main',doc)){initializePreview();}else if(++attempts<100)setTimeout(connect,30);};setTimeout(connect,30);}catch(e){setStatus('Could not update preview: '+e.message);}}
-  function setPreviewPage(page){previewPage=page;previewScroll=0;queuedScroll=0;$('#page-select').value=page;render();}
+  function setPreviewPage(page){clearTimeout(previewClickTimer);previewPage=page;previewScroll=0;queuedScroll=0;$('#page-select').value=page;render();}
   function populatePageSelect(){const select=$('#page-select');select.replaceChildren();const entries=[['index.html','About homepage'],['projects.html','Projects overview'],['project-reaction-wheel-cube.html',state.cubeTitle.replace(/\n/g,' ')],...state.projects.map(p=>['project-'+p.id+'.html',p.title])];entries.forEach(([value,label])=>{const option=element(document,'option',label);option.value=value;select.append(option);});if(!entries.some(([value])=>value===previewPage))previewPage='index.html';select.value=previewPage;}
   function showTab(tab,scrollPreview=false){$$('[data-tab]').forEach(b=>{const selected=b.dataset.tab===tab;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;});$$('.panel').forEach(p=>p.hidden=p.id!=='panel-'+tab);if(scrollPreview){if(tab==='home')setPreviewPage('index.html');else if(tab==='cube')setPreviewPage('project-reaction-wheel-cube.html');else if(tab==='projects')setPreviewPage('projects.html');}}
   function addItalicControl(input){
@@ -144,7 +144,69 @@
   $$('[data-field]').forEach(n=>n.addEventListener('input',()=>{state[n.dataset.field]=n.type==='checkbox'?n.checked:n.value;updateMediaNotes();changed();}));
   $$('[data-color]').forEach(n=>n.addEventListener('input',()=>{state.colors[n.dataset.color]=n.value;changed();}));
   $$('[data-tab]').forEach(b=>{b.addEventListener('click',()=>showTab(b.dataset.tab,true));b.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const tabs=$$('[data-tab]');let i=tabs.indexOf(b);i=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;showTab(tabs[i].dataset.tab,true);tabs[i].focus();});});
-  function initializePreview(){try{const doc=$('#preview').contentDocument;if(!doc||!$('main',doc)||initializedPreviews.has(doc))return;initializedPreviews.add(doc);window.initializePortfolioGalleries(doc);$('#preview').contentWindow.scrollTo(0,queuedScroll??previewScroll);queuedScroll=null;doc.addEventListener('click',e=>{const target=e.target;if(target.closest('video'))return;const a=target.closest('a');if(a){const href=a.getAttribute('href')||'';const [page,hash]=href.split('#');if(page==='index.html'||page==='projects.html'||/^project-[a-z0-9-]+\.html$/.test(page)){e.preventDefault();if(page.startsWith('project-'))showTab(page==='project-reaction-wheel-cube.html'?'cube':'projects');else showTab(page==='index.html'?'home':'projects');setPreviewPage(page);return;}if(href.startsWith('#')){e.preventDefault();doc.getElementById(hash)?.scrollIntoView();return;}e.preventDefault();return;}const projectId=$('main',doc).dataset.projectId;if(projectId)showTab(projectId==='reaction-wheel-cube'?'cube':'projects');else if(target.closest('.hero,#about,#portfolio-contact'))showTab('home');});}catch{}}
+  let previewClickTimer;
+  function focusPreviewField(target,doc){
+    const byLabel=(root,label)=>{if(!root)return null;const match=$$('label',root).find(n=>n.textContent.trim()===label);return match?.htmlFor?document.getElementById(match.htmlFor):null;};
+    const group=(root,title)=>$$('.project-extra',root).find(n=>$('summary',n)?.textContent===title);
+    const row=(root,index)=>root?$$(':scope > fieldset',root)[index]:null;
+    let field=null,tab='home';
+    const card=target.closest('.project-card');
+    const projectId=card?.id||$('main',doc)?.dataset.projectId;
+    const cube=projectId==='reaction-wheel-cube';
+    const projectIndex=state.projects.findIndex(p=>p.id===projectId);
+    if(target.closest('.brand')){field=$('#name');}else if(projectId&&(cube||projectIndex>=0)){
+      tab=cube?'cube':'projects';
+      const root=cube?$('#cube-extras'):$$('#project-fields > fieldset')[projectIndex];
+      const project=cube?state.cubeContent:state.projects[projectIndex];
+      const blocks=cube?state.cubeBlocks:project.blocks;
+      if(card)field=cube?(target.closest('.card-summary')?$('#cube-summary'):$('#cube-title')):byLabel(root,target.closest('.number')?'Category':target.closest('.card-summary')?'Description':'Title');
+      else if(target.closest('.page-heading h1'))field=cube?$('#cube-title'):byLabel(root,'Title');
+      else if(target.closest('.page-heading p'))field=cube?$('#cube-summary'):byLabel(root,'Description');
+      else if(target.closest('.overview-facts .fact')){
+        const fact=target.closest('.fact');const index=$$('.overview-facts .fact',doc).indexOf(fact);
+        if(cube)field=target.closest('strong')?$$('#fact-fields input')[index]:$$('#fact-fields textarea')[index];
+        else{const values=project.facts.map((value,i)=>({value,i})).filter(({value})=>value.title||value.body);field=byLabel(row(group(root,'Three short sections'),values[index]?.i),target.closest('strong')?'Heading':'Short description');}
+      }else if(target.closest('[data-section-key="motivation"]'))field=byLabel(group(root,'Motivation'),'Why you built this project (blank line between paragraphs)');
+      else if(target.closest('[data-section-key="engineering"]'))field=cube?(target.closest('h2')?$('#cube-details-heading'):$('#cube-details')):byLabel(group(root,'Engineering details'),'Design, calculations, challenges, and results');
+      else if(target.closest('[data-section-key="technologies"]'))field=$('#cube-tags');
+      else if(target.closest('[data-section-key="simulation"]'))field=$('#video-caption');
+      else if(target.closest('[data-section-key^="content:"]')){
+        const section=target.closest('[data-section-key^="content:"]');const index=blocks.findIndex(b=>'content:'+b.id===section.dataset.sectionKey);const block=blocks[index];
+        const controls=cube?$('#cube-blocks'):$('.project-content-controls',root);const box=row(controls,index);
+        if(target.closest('h2'))field=byLabel(box,'Heading');
+        else if(block?.type==='code'){
+          const file=target.closest('.code-file');const fileIndex=$$('.code-file',section).indexOf(file);const fileBox=row(box,fileIndex);
+          field=byLabel(fileBox,target.closest('summary,.archive-download')?'File name / clickable label':target.closest('.code-label')?'Language (optional)':'Code (displayed as text)');
+        }else field=byLabel(box,block?.type==='image'?(target.closest('figcaption')?'Caption':'Image description'):'Detailed text (blank line between paragraphs)');
+      }else if(target.closest('.project-gallery,.project-videos')){
+        const section=target.closest('.project-gallery,.project-videos');const video=section.classList.contains('project-videos');const slide=target.closest('.gallery-slide');const items=video?project.videos:project.gallery;
+        const shown=items.map((value,i)=>({value,i})).filter(({value})=>value.src);const index=$$('.gallery-slide',section).indexOf(slide);const box=row(group(root,video?'Videos':'Photo slideshow'),shown[index]?.i);
+        field=byLabel(box,video?(target.closest('h3')?'Video title':'Caption'):(target.closest('figcaption')?'Caption':'Image description'));
+      }else if(target.closest('.parts-list .part-card,.cad-files .part-card')){
+        const part=target.closest('.part-card');const section=part.parentElement;const index=$$('.part-card',section).indexOf(part);const cad=!!target.closest('.cad-files');const box=row(group(root,cad?'CAD files':'Parts list'),index);
+        const label=cad?(target.closest('h3')?'Display name':target.closest('a')?'Download filename':'Description'):(target.closest('h3')?'Part name':target.closest('a')?'Purchase / datasheet link':target.closest('p')?.textContent.startsWith('Quantity:')?'Quantity':'Notes / specifications');field=byLabel(box,label);
+      }else if(target.closest('[data-section-key="links"]'))field=byLabel(root,'Project / GitHub / demo link');else if(target.closest('.project-overview img'))field=byLabel(group(root,'Main headline image'),'Image description');
+    }else{
+      if(target.closest('.brand'))field=$('#name');
+      else if(target.closest('.hero .eyebrow'))field=$('#disciplines');
+      else if(target.closest('.hero h1'))field=target.closest('h1 span')?$('#headline-accent'):$('#headline');
+      else if(target.closest('.hero .intro'))field=$('#intro');
+      else if(target.closest('#about h2'))field=$('#about-heading');
+      else if(target.closest('#about p'))field=$('#about-text');
+      else if(target.closest('.profile-interests'))field=$('#disciplines');
+      else if(target.closest('.profile-monogram'))field=byLabel($('#about-cover-controls'),'Cover image description');
+      else if(target.closest('[data-contact]'))field=$('[data-field="'+target.closest('[data-contact]').dataset.contact+'"]');
+    }
+    if(!field)return;
+    const selected=doc.getSelection()?.toString().trim();showTab(tab);
+    for(let parent=field.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;
+    field.scrollIntoView({block:'center',behavior:'smooth'});field.focus({preventScroll:true});
+    if(selected&&field.setSelectionRange){const start=field.value.indexOf(selected);if(start>=0)field.setSelectionRange(start,start+selected.length);}
+    field.style.boxShadow='0 0 0 3px #b9ed76';setTimeout(()=>field.style.boxShadow='',1800);
+    setStatus('Editing: '+($$('label').find(n=>n.htmlFor===field.id)?.textContent||'selected text'));
+  }
+
+  function initializePreview(){try{const doc=$('#preview').contentDocument;if(!doc||!$('main',doc)||initializedPreviews.has(doc))return;initializedPreviews.add(doc);window.initializePortfolioGalleries(doc);doc.addEventListener('dblclick',e=>{if(e.target.closest('video,button'))return;e.preventDefault();clearTimeout(previewClickTimer);focusPreviewField(e.target,doc);});$('#preview').contentWindow.scrollTo(0,queuedScroll??previewScroll);queuedScroll=null;doc.addEventListener('click',e=>{const target=e.target;if(target.closest('video'))return;const a=target.closest('a');if(a){const href=a.getAttribute('href')||'';const [page,hash]=href.split('#');if(page==='index.html'||page==='projects.html'||/^project-[a-z0-9-]+\.html$/.test(page)){e.preventDefault();clearTimeout(previewClickTimer);if(e.detail<2)previewClickTimer=setTimeout(()=>{if(page.startsWith('project-'))showTab(page==='project-reaction-wheel-cube.html'?'cube':'projects');else showTab(page==='index.html'?'home':'projects');setPreviewPage(page);},300);return;}if(href.startsWith('#')){e.preventDefault();doc.getElementById(hash)?.scrollIntoView();return;}e.preventDefault();return;}const projectId=$('main',doc).dataset.projectId;if(projectId)showTab(projectId==='reaction-wheel-cube'?'cube':'projects');else if(target.closest('.hero,#about,#portfolio-contact'))showTab('home');});}catch{}}
   $('#preview').addEventListener('load',initializePreview);
   $('#desktop').addEventListener('click',()=>{$('#preview').classList.remove('mobile');$('#desktop').setAttribute('aria-pressed','true');$('#mobile').setAttribute('aria-pressed','false');});
   $('#mobile').addEventListener('click',()=>{$('#preview').classList.add('mobile');$('#desktop').setAttribute('aria-pressed','false');$('#mobile').setAttribute('aria-pressed','true');});
