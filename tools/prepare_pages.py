@@ -88,6 +88,10 @@ def build():
     inputs = set(); videos = {}; processed = {}; source_pages = set()
     with tempfile.TemporaryDirectory(prefix='.pages-stage-', dir=ROOT) as stage_name:
         stage = Path(stage_name)
+        analytics = ROOT / 'tools' / 'site-analytics.js'
+        scan_secrets(analytics.read_text(encoding='utf-8'), analytics.name)
+        (stage / 'assets').mkdir(exist_ok=True)
+        shutil.copyfile(analytics, stage / 'assets' / 'site-analytics.js')
         def store(data, suffix):
             data = clean_jpeg(data)
             digest = hashlib.sha256(data).hexdigest()[:24]
@@ -157,6 +161,7 @@ def build():
                 return key + '=' + quote + html.escape(value, quote=True) + quote
             text = ATTR.sub(replace, text)
             text = text.replace('</head>', '<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="canonical" href="' + URL + ('' if name == 'index.html' else name) + '"></head>')
+            text = text.replace('</body>', '<script defer src="assets/site-analytics.js"></script></body>')
             (stage / name).write_text(text, encoding='utf-8'); processed[name] = text
 
         (stage / '.nojekyll').write_text('', encoding='utf-8')

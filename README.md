@@ -30,6 +30,16 @@ Do not add passwords or API keys to project code or uploads: this is a public re
 
 Python 3.11+, Git, and authenticated GitHub CLI. First-time dependencies: `python -m pip install -r requirements-publish.txt`. On another computer, clone this repository and sign in with `gh auth login`. GitHub Actions installs its own build dependency automatically.
 
+## Visitor statistics
+
+Private dashboard: https://owsheetz.goatcounter.com/ (sign in to view counts).
+
+Exclude your own visits: open https://chromahud1.github.io/?exclude-visits=1 once in **each browser and phone** you use. Wait for the confirmation message. The preference persists across all project pages and future visits in that browser. Clearing site storage, changing browsers, or using a private window requires setting it again. To resume counting in that browser, open https://chromahud1.github.io/?exclude-visits=0.
+
+Tracking is added by the publishing build, so editor saves preserve it and local previews never count. The dashboard stays private. Counts begin after installation; unique visitor totals are estimates and blockers can prevent counting. GoatCounter groups repeat visits into sessions of up to eight hours, rather than identifying people permanently. See [GoatCounter's session documentation](https://www.goatcounter.com/help/sessions).
+
+The integration is `tools/site-analytics.js`; it contains a public site identifier, no password or API key. Publishing updates uses the same command above.
+
 ## Resume QR code
 
 `portfolio-qr.png` and `portfolio-qr.svg` encode `https://chromahud1.github.io/` directly. They use no tracking service or expiring redirect. Use the SVG for vector printing or the high-resolution PNG; keep the white border intact. The QR remains valid while this GitHub Pages URL remains available.

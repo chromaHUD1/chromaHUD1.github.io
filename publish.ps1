@@ -12,7 +12,7 @@ if (-not $python) { $python = (Get-Command python -ErrorAction Stop).Source }
 if ($LASTEXITCODE -ne 0) { throw 'Public build failed; nothing was published.' }
 $manifest = Get-Content -LiteralPath (Join-Path $projectDir '.pages-manifest.json') -Raw | ConvertFrom-Json
 $sourceFiles = @($manifest.source_files)
-$extraFiles = @('.gitignore','.gitattributes','.github/workflows/pages.yml','README.md','EDITING.md','editor_server.py','start-editor.ps1','publish.ps1','Publish Website.cmd','requirements-publish.txt','portfolio-qr.png','portfolio-qr.svg','portfolio-qr-url.txt','tools/prepare_pages.py','tools/generate_qr.py','tools/verify_public.py')
+$extraFiles = @('.gitignore','.gitattributes','.github/workflows/pages.yml','README.md','EDITING.md','editor_server.py','start-editor.ps1','publish.ps1','Publish Website.cmd','requirements-publish.txt','portfolio-qr.png','portfolio-qr.svg','portfolio-qr-url.txt','tools/prepare_pages.py','tools/generate_qr.py','tools/verify_public.py','tools/site-analytics.js')
 $toStage = @($sourceFiles + $extraFiles | Where-Object { Test-Path -LiteralPath (Join-Path $projectDir $_) })
 foreach ($relative in $toStage) {
     $target = [IO.Path]::GetFullPath((Join-Path $projectDir $relative))
