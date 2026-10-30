@@ -10,6 +10,31 @@
     if(!response.ok)throw Error('Could not load Media files. Reopen Edit Website.cmd.');
     library=(await response.json()).files;
   };
+  window.appendPortfolioImagePicker=(parent,value,onSelect,label='Choose image from Media')=>{
+    const browse=el('button','Browse Media pictures…');browse.type='button';browse.setAttribute('aria-label',label);
+    browse.addEventListener('click',async()=>{
+      const dialog=el('dialog');dialog.className='image-library';
+      const heading=el('h2','Choose a picture from Media');heading.id='image-library-title';dialog.setAttribute('aria-labelledby',heading.id);
+      const top=el('div');top.className='image-library-top';
+      const dismiss=()=>{dialog.close();dialog.remove();if(browse.isConnected)browse.focus();};
+      const close=el('button','Close');close.type='button';close.addEventListener('click',dismiss);top.append(heading,close);
+      const search=el('input');search.type='search';search.placeholder='Search pictures by filename';search.setAttribute('aria-label','Search Media pictures');
+      const message=el('p','Loading pictures…');message.className='help';message.setAttribute('role','status');
+      const grid=el('div');grid.className='image-library-grid';
+      dialog.append(top,search,message,grid);document.body.append(dialog);
+      dialog.addEventListener('close',()=>{dialog.remove();if(browse.isConnected)browse.focus();},{once:true});dialog.showModal();search.focus();
+      const render=()=>{
+        const query=search.value.trim().toLowerCase();const images=library.filter(f=>f.kind==='image'&&f.name.toLowerCase().includes(query));grid.replaceChildren();
+        message.textContent=images.length?images.length+' picture'+(images.length===1?'':'s')+'. Click a thumbnail to choose it.':query?'No pictures match that filename.':location.protocol==='http:'?'No pictures found. Add pictures to the Media folder and reopen this chooser.':'Open Edit Website.cmd to browse your Media folder. You can also use an image upload control.';
+        for(const file of images){const choice=el('button');choice.type='button';choice.className='image-library-choice';choice.setAttribute('aria-label','Use '+file.name);choice.setAttribute('aria-pressed',String(file.src===value));
+          const image=el('img');image.src=file.src;image.alt='';image.loading='lazy';image.decoding='async';image.addEventListener('error',()=>{image.hidden=true;choice.classList.add('image-unavailable');});
+          const name=el('span',file.name);choice.append(image,name);choice.addEventListener('click',()=>{dismiss();onSelect(file.src);});grid.append(choice);
+        }
+      };
+      search.addEventListener('input',render);
+      try{await window.loadPortfolioMedia();if(dialog.isConnected)render();}catch(error){if(dialog.isConnected)message.textContent=error.message;}
+    });parent.append(browse);return browse;
+  };
   window.populateProjectExtras=(root,p,api)=>{
     const {field,changed,refresh,safeURL}=api;root.replaceChildren();
     const action=(parent,label,fn)=>{const b=el('button',label);b.type='button';b.addEventListener('click',fn);parent.append(b);return b;};
@@ -26,6 +51,10 @@
     });
     const picker=(parent,kind,value,callback)=>{
       field(parent,kind==='image'?'Image file path or URL':'Video file path or URL',value,callback);
+      if(kind==='image'){
+        window.appendPortfolioImagePicker(parent,value,src=>{callback(src);changed();refresh();});
+        return;
+      }
       const select=el('select');select.setAttribute('aria-label',kind==='image'?'Choose image from Media':'Choose video from Media');
       select.append(new Option('Choose from your Media folder…',''));
       for(const item of library.filter(f=>f.kind===kind))select.append(new Option(item.name,item.src));
