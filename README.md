@@ -7,8 +7,8 @@ Repository: https://github.com/chromaHUD1/chromaHUD1.github.io
 ## Make an update
 
 1. Double-click `dist/Edit Website.cmd` to open the visual editor. You can also edit the source using Codex.
-2. Click **Save website** in the editor. This updates the local pages in `dist`.
-3. Double-click **Publish Website.cmd**, or run `./publish.ps1 -Message 'Describe your update'` in PowerShell.
+2. Click **Save & Publish** in the editor to save your current edits, commit the portfolio, and push it to GitHub. Keep the tab open until it confirms the push.
+3. Alternatively, **Save website** saves locally; then double-click **Publish Website.cmd**, or run `./publish.ps1 -Message 'Describe your update'` in PowerShell. If publishing fails, check `editor-publish.log` in the project folder; locally saved edits are retained.
 4. Check the repository's **Actions** tab. When the Pages deployment is green, refresh the public website.
 
 Normal Git commits and pushes to `main` also trigger deployment. The helper stages only current website pages, referenced assets, local editor files, and publishing tools. It never force-pushes.

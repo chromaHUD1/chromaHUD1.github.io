@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import secrets
 import shutil
+import subprocess
 import tempfile
 import threading
 from datetime import datetime, timezone
@@ -18,6 +19,21 @@ ALLOWED_FILE = re.compile(r'(?:index|projects|project-[a-z0-9-]+)\.html|editor-t
 SAVE_LOCK = threading.Lock()
 TOKEN = secrets.token_urlsafe(32)
 MAX_BODY = 256 * 1024 * 1024
+
+
+def run_publisher():
+    """Run only the portfolio's fixed publishing script; accept no shell commands."""
+    log = PROJECT / 'editor-publish.log'
+    with log.open('w', encoding='utf-8') as output:
+        result = subprocess.run(
+            ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+             '-File', str(PROJECT / 'publish.ps1')],
+            cwd=PROJECT, stdout=output, stderr=subprocess.STDOUT, timeout=600,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    if result.returncode:
+        raise RuntimeError('Your edits are saved, but publishing failed. See editor-publish.log in the portfolio folder for the error; fix it and try again.')
+    return {'pushed': True, 'url': 'https://chromahud1.github.io/',
+            'deploymentUrl': 'https://github.com/chromaHUD1/chromaHUD1.github.io/actions'}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -45,7 +61,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.respond(403, {'error': 'Open this editor through its local launcher.'})
             return
         if urlsplit(self.path).path == '/__portfolio/session':
-            self.respond(200, {'app': 'owen-portfolio-editor', 'folder': str(SITE), 'token': TOKEN})
+            self.respond(200, {'app': 'owen-portfolio-editor', 'folder': str(SITE), 'token': TOKEN, 'capabilities': ['publish']})
             return
         if urlsplit(self.path).path == '/__portfolio/media':
             media = []
@@ -68,7 +84,8 @@ class Handler(SimpleHTTPRequestHandler):
                 or self.headers.get('X-Portfolio-Token') != TOKEN):
             self.respond(403, {'error': 'Save must come from this local editor.'})
             return
-        if urlsplit(self.path).path != '/__portfolio/save':
+        publish = urlsplit(self.path).path == '/__portfolio/publish'
+        if urlsplit(self.path).path not in {'/__portfolio/save', '/__portfolio/publish'}:
             self.respond(404, {'error': 'Unknown endpoint.'})
             return
         try:
@@ -86,7 +103,10 @@ class Handler(SimpleHTTPRequestHandler):
                 target = SITE / name
                 if target.is_symlink() or target.resolve().parent != SITE:
                     raise ValueError('A saved file must stay inside the portfolio folder.')
-            with SAVE_LOCK:
+            if not SAVE_LOCK.acquire(blocking=False):
+                self.respond(409, {'error': 'Another save or publish is running. Wait for it to finish, then try again.'})
+                return
+            try:
                 prepared = {}
                 previous = {}
                 replaced = []
@@ -121,11 +141,20 @@ class Handler(SimpleHTTPRequestHandler):
                 finally:
                     for staged in prepared.values():
                         staged.unlink(missing_ok=True)
-            self.respond(200, {'saved': len(files), 'folder': str(SITE)})
+                result = {'saved': len(files), 'folder': str(SITE)}
+                if publish:
+                    result.update(run_publisher())
+            finally:
+                SAVE_LOCK.release()
+            self.respond(200, result)
         except (ValueError, json.JSONDecodeError) as error:
             self.respond(400, {'error': str(error)})
         except OSError as error:
             self.respond(500, {'error': f'Could not save the files: {error}'})
+        except subprocess.TimeoutExpired:
+            self.respond(500, {'error': 'Your edits are saved, but publishing timed out. Check editor-publish.log and GitHub Actions before retrying.'})
+        except RuntimeError as error:
+            self.respond(500, {'error': str(error)})
 
 
 if __name__ == '__main__':

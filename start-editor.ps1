@@ -11,6 +11,19 @@ $session = Get-EditorSession
 if ($session -and ($session.app -ne 'owen-portfolio-editor' -or $session.folder -ne $expectedFolder)) {
     throw 'Port 8765 is being used by another service. Close that service, then open Edit Website again.'
 }
+if ($session -and 'publish' -notin @($session.capabilities)) {
+    # Replace only this portfolio's verified older helper. Browser edits stay open.
+    $serverScript = Join-Path $projectDir 'editor_server.py'
+    $listeners = @(Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 8765 -State Listen -ErrorAction Stop)
+    foreach ($listener in $listeners) {
+        $helper = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $listener.OwningProcess)
+        if (-not $helper -or $helper.Name -notmatch '^python(?:w)?\.exe$' -or -not $helper.CommandLine.Contains($serverScript)) {
+            throw 'The existing helper could not be verified. Close the portfolio editor helper before reopening Edit Website.cmd.'
+        }
+        Stop-Process -Id $helper.ProcessId -ErrorAction Stop
+    }
+    $session = $null
+}
 if (-not $session) {
     $pythonCandidates = @('C:/Users/mocha/AppData/Local/Programs/Python/Python311/python.exe', 'C:/Users/mocha/AppData/Local/Programs/Python/Python313/python.exe')
     $python = $pythonCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1

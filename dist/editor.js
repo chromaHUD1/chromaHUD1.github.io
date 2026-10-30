@@ -149,11 +149,43 @@
   function updateMediaNotes(){for(const [id,value] of [['video-note',state.videoSrc],['poster-note',state.videoPoster],['cube-image-note',state.cubeImage],['resume-note',state.resume]]){$('#'+id).textContent=value?.startsWith('data:')?'Chosen file included in website.':value?'Current: '+value:'No file selected.';} }
   function changed(){window.normalizePortfolioState(state);populatePageSelect();dirty=true;setStatus('Unsaved website changes · preview updated.');clearTimeout(renderTimer);renderTimer=setTimeout(render,200);clearTimeout(draftTimer);draftTimer=setTimeout(storeDraft,900);}
   const snapshot=()=>({format:'owen-portfolio-draft',version:1,baseHTML,state,savedAt:new Date().toISOString()});
-  async function storeDraft(){if(!db)return;try{await new Promise((resolve,reject)=>{const tx=db.transaction('drafts','readwrite');tx.objectStore('drafts').put(snapshot(),'latest');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});if(dirty)setStatus('Editing draft saved in this browser · save website to update index.html.');}catch{setStatus('Browser draft storage is unavailable or full. Download an editing draft to keep your work.');}}
+  async function storeDraft(){if(!db)return;try{await new Promise((resolve,reject)=>{const tx=db.transaction('drafts','readwrite');tx.objectStore('drafts').put(snapshot(),'latest');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});if(dirty&&!$('#save-site').disabled)setStatus('Editing draft saved in this browser · save website to update index.html.');}catch{setStatus('Browser draft storage is unavailable or full. Download an editing draft to keep your work.');}}
   function initDrafts(){try{const request=indexedDB.open('owen-portfolio-studio',1);request.onupgradeneeded=()=>request.result.createObjectStore('drafts');request.onsuccess=()=>{db=request.result;const folderRequest=db.transaction('drafts').objectStore('drafts').get('folder');folderRequest.onsuccess=()=>{directoryHandle=folderRequest.result||directoryHandle;};const get=db.transaction('drafts').objectStore('drafts').get('latest');get.onsuccess=()=>{draftAvailable=get.result;if(draftAvailable && !dirty)$('#draft-banner').hidden=false;};};request.onerror=()=>setStatus('Ready to edit. Use Download editing draft to keep a backup.');}catch{setStatus('Ready to edit. Browser draft storage is unavailable; download a draft to keep a backup.');}}
   function download(content,name,type){const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   function downloadPages(){download(window.portfolioZip(exportFiles()),'portfolio-pages.zip','application/zip');setStatus('Pages ZIP downloaded. Extract it into dist, replace existing files, and keep the assets folder.');}
-  async function saveSite(){const button=$('#save-site');if(button.disabled)return;button.disabled=true;const originalLabel=button.textContent;button.textContent='Saving…';let writing=false;try{const files=exportFiles();const savedState=JSON.stringify(state);if(localEditor){const session=await localSession();const response=await fetch('/__portfolio/save',{method:'POST',headers:{'Content-Type':'application/json','X-Portfolio-Token':session.token},body:JSON.stringify({files})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not save the website.');dirty=JSON.stringify(state)!==savedState;setStatus(dirty?'Website saved. Additional changes remain unsaved.':'Website saved. Refresh your website to see the changes.');return;}if(!('showDirectoryPicker'in window)){setStatus('Open Edit Website.cmd in the portfolio folder for direct saving. Your editing draft is still here.');return;}if(!directoryHandle){directoryHandle=await showDirectoryPicker({mode:'readwrite'});if(db){try{const tx=db.transaction('drafts','readwrite');tx.objectStore('drafts').put(directoryHandle,'folder');}catch{}}}if(directoryHandle.queryPermission&&await directoryHandle.queryPermission({mode:'readwrite'})!=='granted'){const permission=await directoryHandle.requestPermission({mode:'readwrite'});if(permission!=='granted')throw new Error('Folder access was not granted. Open Edit Website.cmd for direct saving.');}writing=true;for(const [name,content]of Object.entries(files)){const handle=await directoryHandle.getFileHandle(name,{create:true});const stream=await handle.createWritable();await stream.write(content);await stream.close();}dirty=JSON.stringify(state)!==savedState;setStatus(dirty?'Website saved. Additional changes remain unsaved.':'Website saved. Refresh your website to see the changes.');}catch(e){if(e.name==='AbortError'){setStatus('Save canceled. Your editing draft is still here.');}else{setStatus((writing?'Saving stopped; some pages may have saved. ':'Could not save. ')+e.message);}}finally{button.disabled=false;button.textContent=originalLabel;}}
+  async function saveSite(publish=false){
+    const save=$('#save-site'), publishButton=$('#publish-site');
+    if(save.disabled||publishButton.disabled)return;
+    if(publish&&!localEditor){setStatus('Open Edit Website.cmd to use Save & Publish. Your editing draft is still here.');return;}
+    const button=publish?publishButton:save;const originalLabel=button.textContent;
+    save.disabled=true;publishButton.disabled=true;button.textContent=publish?'Saving & publishing…':'Saving…';
+    let writing=false;
+    try{
+      const files=exportFiles();const savedState=JSON.stringify(state);
+      if(localEditor){
+        const session=await localSession();
+        if(publish&&!session.capabilities?.includes('publish'))throw new Error('Reopen Edit Website.cmd to update the local editor, then try Save & Publish again.');
+        setStatus(publish?'Saving your edits and publishing to GitHub. Keep this tab open…':'Saving website…');
+        const response=await fetch(publish?'/__portfolio/publish':'/__portfolio/save',{method:'POST',headers:{'Content-Type':'application/json','X-Portfolio-Token':session.token},body:JSON.stringify({files})});
+        const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not save the website.');
+        dirty=JSON.stringify(state)!==savedState;
+        if(publish){
+          if(!result.pushed)throw new Error('The server did not confirm a GitHub push. Check Deployment status before retrying.');
+          $('#publish-status-link').hidden=false;
+          setStatus('Saved and pushed to GitHub. Wait for Deployment status to turn green, then refresh the live site.'+(dirty?' New changes made during publishing are still unsaved.':''));
+        }else setStatus(dirty?'Website saved. Additional changes remain unsaved.':'Website saved locally. Use Save & Publish to update the live site.');
+        return;
+      }
+      if(!('showDirectoryPicker'in window)){setStatus('Open Edit Website.cmd in the portfolio folder for direct saving. Your editing draft is still here.');return;}
+      if(!directoryHandle){directoryHandle=await showDirectoryPicker({mode:'readwrite'});if(db){try{const tx=db.transaction('drafts','readwrite');tx.objectStore('drafts').put(directoryHandle,'folder');}catch{}}}
+      if(directoryHandle.queryPermission&&await directoryHandle.queryPermission({mode:'readwrite'})!=='granted'){const permission=await directoryHandle.requestPermission({mode:'readwrite'});if(permission!=='granted')throw new Error('Folder access was not granted. Open Edit Website.cmd for direct saving.');}
+      writing=true;for(const [name,content]of Object.entries(files)){const handle=await directoryHandle.getFileHandle(name,{create:true});const stream=await handle.createWritable();await stream.write(content);await stream.close();}
+      dirty=JSON.stringify(state)!==savedState;setStatus(dirty?'Website saved. Additional changes remain unsaved.':'Website saved locally. Use Save & Publish to update the live site.');
+    }catch(e){
+      if(e.name==='AbortError')setStatus('Save canceled. Your editing draft is still here.');
+      else setStatus((publish?'Save & Publish could not finish. ':writing?'Saving stopped; some pages may have saved. ':'Could not save. ')+e.message);
+    }finally{save.disabled=false;publishButton.disabled=false;button.textContent=originalLabel;}
+  }
   async function readFile(file){const content=await file.text();let nextBase,nextState;if(file.name.toLowerCase().endsWith('.json')){const draft=JSON.parse(content);if(draft.format!=='owen-portfolio-draft'||draft.version!==1)throw new Error('This is not a portfolio editing draft.');nextBase=draft.baseHTML;const validated=readState(nextBase);nextState={...validated,...draft.state,colors:{...validated.colors,...draft.state?.colors}};if(!Array.isArray(nextState.projects)||!Array.isArray(nextState.facts))throw new Error('This draft has invalid project data.');}else{nextBase=content;nextState=readState(content);}baseHTML=nextBase;state=nextState;dirty=false;$('#draft-banner').hidden=true;populate();previewScroll=0;render();setStatus('Opened '+file.name+'. Ready to edit.');}
   async function openFile(){try{if(dirty&&!confirm('Open another file? Download an editing draft first if you want to keep these changes.'))return;if('showOpenFilePicker' in window){const [handle]=await showOpenFilePicker({types:[{description:'Website or editing draft',accept:{'text/html':['.html'],'application/json':['.json']}}],multiple:false});const file=await handle.getFile();await readFile(file);fileHandle=file.name.endsWith('.html')?handle:null;}else $('#file-input').click();}catch(e){if(e.name!=='AbortError')setStatus('Could not open file: '+e.message);}}
   async function uploadMedia(input,type,accept){const file=input.files[0];if(!file)return;if(!file.type.startsWith(type)){setStatus('Please choose a '+type.replace('/','')+' file.');input.value='';return;}setStatus('Reading '+file.name+'…');try{const result=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file);});accept(result);updateMediaNotes();}catch(e){setStatus('Could not read media: '+e.message);}input.value='';}
@@ -235,7 +267,8 @@
   $('#poster-upload').addEventListener('change',()=>uploadMedia($('#poster-upload'),'image/',url=>{state.videoPoster=url;changed();}));
   $('#resume-upload').addEventListener('change',()=>uploadMedia($('#resume-upload'),'application/pdf',url=>{state.resume=url;populate();changed();}));
   $('#clear-resume').addEventListener('click',()=>{state.resume='';populate();changed();});
-  $('#save-site').addEventListener('click',saveSite);
+  $('#save-site').addEventListener('click',()=>saveSite());
+  $('#publish-site').addEventListener('click',()=>saveSite(true));
   $('#download-site').addEventListener('click',downloadPages);
   $('#page-select').addEventListener('change',e=>setPreviewPage(e.target.value));
   $('#save-draft').addEventListener('click',()=>{download(JSON.stringify(snapshot(),null,2),'portfolio-editing-draft.json','application/json');setStatus('Editing draft downloaded. Open it here to continue later.');});
